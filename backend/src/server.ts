@@ -1,52 +1,50 @@
-import { createServer } from "http";
-import WebSocket, { WebSocketServer } from "ws";
+import { createServer } from "node:http";
+import { WebSocketServer } from "ws";
 
 import { config } from "./config.js";
 import { RoomManager } from "./rooms/room-manager.js";
 
-const server = createServer((req, res) => {
+const server = createServer((_req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end(JSON.stringify({
-    status: "Server is running",
-    service: "Chess-server",
-  }));
+  res.end("chess server");
 });
 
 const roomManager = new RoomManager();
-const roomWss = new WebSocketServer({ noServer: true });
+const matchmakingWss = new WebSocketServer({ noServer: true });
+const gameWss = new WebSocketServer({ noServer: true });
 
-roomWss.on("connection", (socket) => {
-    console.log("Player connected");
-    roomManager.addPlayer(socket);
-
-    socket.on("close", () => {
-      console.log("Player disconnected");
-      roomManager.removePlayer(socket);
-    });
-
-    socket.on("error", (error) => {
-      console.error("WebSocket error:", error);
-      roomManager.removePlayer(socket);
-    });
+matchmakingWss.on("connection", (socket) => {
+  roomManager.matchmake(socket);
+  socket.on("close", () => roomManager.leaveMatchmaking(socket));
 });
 
 server.on("upgrade", (request, socket, head) => {
-  const url = new URL(
-    request.url ?? "/",
-    `http://${request.headers.host ?? "localhost"}`,
-  );
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
-  if (url.pathname !== "/room") {
-    socket.destroy();
+  if (url.pathname === "/rooms") {
+    matchmakingWss.handleUpgrade(request, socket, head, (ws) => {
+      matchmakingWss.emit("connection", ws);
+    });
     return;
   }
 
-  roomWss.handleUpgrade(request, socket, head, (ws) => {
-    roomWss.emit("connection", ws, request);
-  });
+  const gameMatch = url.pathname.match(/^\/rooms\/([^/]+)$/);
+  if (gameMatch) {
+    const gameId = gameMatch[1]!;
+    gameWss.handleUpgrade(request, socket, head, (ws) => {
+      const room = roomManager.joinGame(gameId, ws);
+      if (!room) {
+        ws.close();
+        return;
+      }
+      ws.on("close", () => roomManager.leaveGame(ws));
+    });
+    return;
+  }
+
+  socket.destroy();
 });
 
 server.listen(config.port, () => {
-  console.log(`Server is running on port ${config.port}`);
-  console.log('Listening on http://localhost:' + config.port + '/');
+  console.log(`Chess server listening on port ${config.port}`);
 });

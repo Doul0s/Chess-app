@@ -1,80 +1,52 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
+import { ChessGame } from "../chess/chess-game.js";
 
-interface WaitingPlayer {
-  socket: WebSocket;
-}
-
-export interface Room {
+export interface GameRoom {
   id: string;
-  players: WebSocket[];
+  white: WebSocket | null;
+  black: WebSocket | null;
+  game: ChessGame;
 }
 
 export class RoomManager {
-  private waitingPlayer: WaitingPlayer | null = null;
-  private readonly rooms = new Map<string, Room>();
+  private waitingForMatch: WebSocket | null = null;
+  private readonly rooms = new Map<string, GameRoom>();
 
-  addPlayer(socket: WebSocket): void {
-    // Nobody is waiting yet.
-    if (this.waitingPlayer === null) {
-      this.waitingPlayer = { socket };
-
-      console.log("Player is waiting for an opponent.");
-      return;
-    }
-
-    // Match the waiting player with the new player.
-    const firstPlayer = this.waitingPlayer.socket;
-    this.waitingPlayer = null;
-
-    const room: Room = {
-      id: randomUUID(),
-      players: [firstPlayer, socket],
-    };
-
+  matchmake(socket: WebSocket): void {
+    if (!this.waitingForMatch) { this.waitingForMatch = socket; return; }
+    const opponent = this.waitingForMatch;
+    this.waitingForMatch = null;
+    const room: GameRoom = { id: randomUUID(), white: null, black: null, game: new ChessGame() };
     this.rooms.set(room.id, room);
-
-    firstPlayer.send(room.id);
+    opponent.send(room.id);
     socket.send(room.id);
-
-    console.log(`Game room created: ${room.id}`);
+    opponent.close();
+    socket.close();
   }
 
-  removePlayer(socket: WebSocket): void {
-    // Player disconnected while waiting.
-    if (this.waitingPlayer?.socket === socket) {
-      this.waitingPlayer = null;
+  leaveMatchmaking(socket: WebSocket): void { if (this.waitingForMatch === socket) this.waitingForMatch = null; }
 
-      console.log("Waiting player disconnected.");
-      return;
-    }
+  joinGame(gameId: string, socket: WebSocket): GameRoom | null {
+    const room = this.rooms.get(gameId);
+    if (!room || (room.white && room.black)) return null;
+    if (!room.white) { room.white = socket; return room; }
+    room.black = socket;
+    room.white.send("white");
+    room.black.send("black");
+    return room;
+  }
 
+  leaveGame(socket: WebSocket): void {
     for (const [id, room] of this.rooms) {
-      const playerIndex = room.players.indexOf(socket);
-
-      if (playerIndex === -1) {
-        continue;
-      }
-
-      const opponent = room.players.find(
-        (player) => player !== socket,
-      );
-
+      if (room.white !== socket && room.black !== socket) continue;
+      const opponent = room.white === socket ? room.black : room.white;
       this.rooms.delete(id);
-
-      console.log(`Player disconnected from game ${id}.`);
-      console.log(`Game ${id} terminated.`);
-
       if (opponent && opponent.readyState === opponent.OPEN) {
         opponent.send("opponent_disconnected");
         opponent.close();
       }
-
       return;
     }
-  }
-
-  getRoom(id: string): Room | undefined {
-    return this.rooms.get(id);
   }
 }
