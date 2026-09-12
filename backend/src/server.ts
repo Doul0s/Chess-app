@@ -16,6 +16,7 @@ const gameWss = new WebSocketServer({ noServer: true });
 matchmakingWss.on("connection", (socket) => {
   roomManager.matchmake(socket);
   socket.on("close", () => roomManager.leaveMatchmaking(socket));
+  socket.on("error", () => roomManager.leaveMatchmaking(socket));
 });
 
 server.on("upgrade", (request, socket, head) => {
@@ -37,7 +38,9 @@ server.on("upgrade", (request, socket, head) => {
         ws.close();
         return;
       }
+      ws.on("message", (data) => roomManager.handleMove(ws, data.toString()));
       ws.on("close", () => roomManager.leaveGame(ws));
+      ws.on("error", () => roomManager.leaveGame(ws));
     });
     return;
   }

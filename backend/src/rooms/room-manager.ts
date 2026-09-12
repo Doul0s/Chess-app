@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
 import { ChessGame } from "../chess/chess-game.js";
+import type { Color } from "../chess/types.js";
 
 export interface GameRoom {
   id: string;
@@ -38,15 +39,58 @@ export class RoomManager {
   }
 
   leaveGame(socket: WebSocket): void {
-    for (const [id, room] of this.rooms) {
-      if (room.white !== socket && room.black !== socket) continue;
-      const opponent = room.white === socket ? room.black : room.white;
-      this.rooms.delete(id);
-      if (opponent && opponent.readyState === opponent.OPEN) {
-        opponent.send("opponent_disconnected");
-        opponent.close();
-      }
+    const found = this.findRoomBySocket(socket);
+    if (!found) return;
+    const { room } = found;
+    const opponent = room.white === socket ? room.black : room.white;
+    this.rooms.delete(room.id);
+    if (opponent && opponent.readyState === opponent.OPEN) {
+      opponent.send("opponent_disconnected");
+      opponent.close();
+    }
+  }
+
+  handleMove(socket: WebSocket, message: string): void {
+    const found = this.findRoomBySocket(socket);
+    if (!found) return;
+    const { room, color } = found;
+
+    if (!room.white || !room.black) {
+      socket.send("game_not_started");
       return;
     }
+
+    const result = room.game.makeMove(color, message.trim());
+    if (!result.ok) {
+      socket.send(result.reason);
+      return;
+    }
+
+    const opponent = color === "white" ? room.black : room.white;
+    opponent.send(message.trim());
+
+    if (room.game.status !== "active") this.endGame(room, color);
+  }
+
+  private endGame(room: GameRoom, mover: Color): void {
+    const summary = room.game.status === "checkmate"
+      ? `game_over:checkmate:${mover}`
+      : `game_over:${room.game.status}`;
+
+    for (const socket of [room.white, room.black]) {
+      if (socket && socket.readyState === socket.OPEN) {
+        socket.send(summary);
+        socket.close();
+      }
+    }
+    this.rooms.delete(room.id);
+  }
+
+  private findRoomBySocket(socket: WebSocket): { room: GameRoom; color: Color } | null {
+    for (const room of this.rooms.values()) {
+      if (room.white === socket) return { room, color: "white" };
+      if (room.black === socket) return { room, color: "black" };
+    }
+    return null;
   }
 }
