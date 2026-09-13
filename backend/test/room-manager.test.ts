@@ -78,6 +78,71 @@ test("disconnect during an active game notifies the opponent and drops the room"
   assert.equal(black.readyState, FakeSocket.CLOSED);
 });
 
+test("flag falls when the side to move runs out of time", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const manager = new RoomManager(1_000);
+  const a = new FakeSocket(), c = new FakeSocket();
+  manager.matchmake(asSocket(a));
+  manager.matchmake(asSocket(c));
+  const gameId = a.sent[0]!;
+  const white = new FakeSocket(), black = new FakeSocket();
+  manager.joinGame(gameId, asSocket(white));
+  manager.joinGame(gameId, asSocket(black));
+
+  t.mock.timers.tick(1_000);
+
+  assert.equal(white.sent.at(-1), "game_over:timeout:black");
+  assert.equal(black.sent.at(-1), "game_over:timeout:black");
+  assert.equal(white.readyState, FakeSocket.CLOSED);
+  assert.equal(black.readyState, FakeSocket.CLOSED);
+});
+
+test("rescheduling after a move uses the opponent's actual remaining time, not a fresh clock", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const manager = new RoomManager(1_000);
+  const a = new FakeSocket(), c = new FakeSocket();
+  manager.matchmake(asSocket(a));
+  manager.matchmake(asSocket(c));
+  const gameId = a.sent[0]!;
+  const white = new FakeSocket(), black = new FakeSocket();
+  manager.joinGame(gameId, asSocket(white));
+  manager.joinGame(gameId, asSocket(black));
+
+  t.mock.timers.tick(400);
+  manager.handleMove(asSocket(white), "e2e4"); // white spends 400ms, 600ms left
+
+  t.mock.timers.tick(300);
+  manager.handleMove(asSocket(black), "e7e5"); // black spends 300ms; white's next timer must use its remaining 600ms, not a fresh 1000ms
+
+  t.mock.timers.tick(599);
+  assert.equal(white.sent.filter(m => m.startsWith("game_over")).length, 0);
+
+  t.mock.timers.tick(1);
+  assert.equal(white.sent.at(-1), "game_over:timeout:black");
+});
+
+test("an illegal move attempt still burns the mover's thinking time but does not switch turns", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const manager = new RoomManager(1_000);
+  const a = new FakeSocket(), c = new FakeSocket();
+  manager.matchmake(asSocket(a));
+  manager.matchmake(asSocket(c));
+  const gameId = a.sent[0]!;
+  const white = new FakeSocket(), black = new FakeSocket();
+  manager.joinGame(gameId, asSocket(white));
+  manager.joinGame(gameId, asSocket(black));
+
+  t.mock.timers.tick(700);
+  manager.handleMove(asSocket(white), "e2e5"); // illegal; burns 700ms of white's own clock, 300ms left
+  assert.equal(white.sent.at(-1), "illegal_move");
+
+  t.mock.timers.tick(299);
+  assert.equal(white.sent.filter(m => m.startsWith("game_over")).length, 0);
+
+  t.mock.timers.tick(1);
+  assert.equal(white.sent.at(-1), "game_over:timeout:black");
+});
+
 test("host disconnecting before an opponent joins cleans up the room", () => {
   const manager = new RoomManager();
   const a = new FakeSocket(), c = new FakeSocket();

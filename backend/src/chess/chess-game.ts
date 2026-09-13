@@ -3,6 +3,8 @@ import { applyMove, generateLegalMoves, isInCheck, parseMove, type PositionState
 import type { Color, GameStatus, Move, MoveResult } from "./types.js";
 import { opposite } from "./types.js";
 
+export const DEFAULT_CLOCK_MS = 600_000;
+
 export class ChessGame {
   private state: PositionState = {
     board: createInitialBoard(),
@@ -13,10 +15,12 @@ export class ChessGame {
 
   private readonly moveHistory: Move[] = [];
   private readonly positions = new Map<string, number>();
+  private readonly clocks: Record<Color, number>;
   private halfmoveClock = 0;
   public status: GameStatus = "active";
 
-  constructor() {
+  constructor(clockMs: number = DEFAULT_CLOCK_MS) {
+    this.clocks = { white: clockMs, black: clockMs };
     this.positions.set(this.positionKey(), 1);
   }
 
@@ -24,9 +28,21 @@ export class ChessGame {
   get history(): readonly Move[] { return this.moveHistory; }
   get board(): ReadonlyMap<string, import("./types.js").Piece> { return this.state.board; }
 
-  makeMove(color: Color, input: string): MoveResult {
+  remainingMs(color: Color): number { return this.clocks[color]; }
+
+  expireClock(color: Color): void {
+    if (this.status === "active" && color === this.state.turn) this.status = "timeout";
+  }
+
+  makeMove(color: Color, input: string, elapsedMs = 0): MoveResult {
     if (this.status !== "active") return { ok: false, reason: "game_over" };
     if (color !== this.state.turn) return { ok: false, reason: "not_your_turn" };
+
+    this.clocks[color] = Math.max(0, this.clocks[color] - elapsedMs);
+    if (this.clocks[color] <= 0) {
+      this.status = "timeout";
+      return { ok: false, reason: "timeout" };
+    }
 
     const parsed = parseMove(input);
     if (!parsed) return { ok: false, reason: "invalid_move_format" };

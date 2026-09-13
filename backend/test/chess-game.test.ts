@@ -80,3 +80,35 @@ test("supports promotion", () => {
   assert.deepEqual(game.makeMove("white", "a7a8q"), { ok: true });
   assert.equal(game.board.get("a8")?.type, "queen");
 });
+
+test("deducts elapsed thinking time from the mover's clock only", () => {
+  const game = new ChessGame(10_000);
+  game.makeMove("white", "e2e4", 4_000);
+  assert.equal(game.remainingMs("white"), 6_000);
+  assert.equal(game.remainingMs("black"), 10_000);
+});
+
+test("running out of time on a move attempt ends the game as a timeout", () => {
+  const game = new ChessGame(10_000);
+  const result = game.makeMove("white", "e2e4", 10_001);
+  assert.equal(result.ok, false);
+  assert.equal(!result.ok && result.reason, "timeout");
+  assert.equal(game.status, "timeout");
+});
+
+test("expireClock ends the game for the color to move", () => {
+  const game = new ChessGame(10_000);
+  game.expireClock("white");
+  assert.equal(game.status, "timeout");
+});
+
+test("expireClock does not override an already-finished game", () => {
+  const game = new ChessGame(10_000);
+  game.makeMove("white", "f2f3", 0);
+  game.makeMove("black", "e7e5", 0);
+  game.makeMove("white", "g2g4", 0);
+  game.makeMove("black", "d8h4", 0);
+  assert.equal(game.status, "checkmate");
+  game.expireClock("black");
+  assert.equal(game.status, "checkmate");
+});

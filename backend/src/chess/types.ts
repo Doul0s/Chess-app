@@ -1,6 +1,6 @@
 export type Color = "white" | "black";
 export type PieceType = "king" | "queen" | "rook" | "bishop" | "knight" | "pawn";
-export type GameStatus = "active" | "checkmate" | "stalemate" | "draw";
+export type GameStatus = "active" | "checkmate" | "stalemate" | "draw" | "timeout";
 
 export interface Piece {
   color: Color;
