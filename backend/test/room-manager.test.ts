@@ -166,3 +166,70 @@ test("reporting the same disconnect twice does not double-notify or throw", () =
   manager.leaveGame(asSocket(white));
   assert.equal(black.sent.filter(m => m === "opponent_disconnected").length, 1);
 });
+
+test("createInvite seats the creator as white immediately, no waiting", () => {
+  const manager = new RoomManager();
+  const host = new FakeSocket();
+  const gameId = manager.createInvite(asSocket(host), "private");
+  assert.equal(host.sent[0], gameId);
+});
+
+test("joining an invite room assigns colors the same way as matchmaking", () => {
+  const manager = new RoomManager();
+  const host = new FakeSocket(), guest = new FakeSocket();
+  const gameId = manager.createInvite(asSocket(host), "private");
+  manager.joinGame(gameId, asSocket(guest));
+  assert.equal(host.sent.at(-1), "white");
+  assert.equal(guest.sent.at(-1), "black");
+});
+
+test("a public invite is listed while waiting and disappears once filled", () => {
+  const manager = new RoomManager();
+  const host = new FakeSocket(), guest = new FakeSocket();
+  const gameId = manager.createInvite(asSocket(host), "public");
+  assert.deepEqual(manager.listPublicRooms(), [gameId]);
+  manager.joinGame(gameId, asSocket(guest));
+  assert.deepEqual(manager.listPublicRooms(), []);
+});
+
+test("a private invite never appears in the public list", () => {
+  const manager = new RoomManager();
+  const host = new FakeSocket();
+  manager.createInvite(asSocket(host), "private");
+  assert.deepEqual(manager.listPublicRooms(), []);
+});
+
+test("a matchmaking room is never listed publicly, even mid-handshake", () => {
+  const manager = new RoomManager();
+  const a = new FakeSocket(), c = new FakeSocket();
+  manager.matchmake(asSocket(a));
+  manager.matchmake(asSocket(c));
+  assert.deepEqual(manager.listPublicRooms(), []);
+});
+
+test("ratings default to 1200 when not supplied", () => {
+  const manager = new RoomManager();
+  const host = new FakeSocket(), guest = new FakeSocket();
+  const gameId = manager.createInvite(asSocket(host), "private");
+  const room = manager.joinGame(gameId, asSocket(guest));
+  assert.deepEqual(room?.ratings, { white: 1200, black: 1200 });
+});
+
+test("supplied ratings are recorded per color at seating time", () => {
+  const manager = new RoomManager();
+  const host = new FakeSocket(), guest = new FakeSocket();
+  const gameId = manager.createInvite(asSocket(host), "private", 1400);
+  const room = manager.joinGame(gameId, asSocket(guest), 1350);
+  assert.deepEqual(room?.ratings, { white: 1400, black: 1350 });
+});
+
+test("a matchmaking room has no ratings until players seat via /rooms/:gameId", () => {
+  const manager = new RoomManager();
+  const a = new FakeSocket(), c = new FakeSocket();
+  manager.matchmake(asSocket(a));
+  manager.matchmake(asSocket(c));
+  const gameId = a.sent[0]!;
+  const white = new FakeSocket();
+  const room = manager.joinGame(gameId, asSocket(white), 1600);
+  assert.deepEqual(room?.ratings, { white: 1600, black: null });
+});

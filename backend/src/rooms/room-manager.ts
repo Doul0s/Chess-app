@@ -4,10 +4,15 @@ import { ChessGame, DEFAULT_CLOCK_MS } from "../chess/chess-game.js";
 import type { Color } from "../chess/types.js";
 import { opposite } from "../chess/types.js";
 
+export type RoomVisibility = "public" | "private";
+export const DEFAULT_RATING = 1200;
+
 export interface GameRoom {
   id: string;
+  visibility: RoomVisibility;
   white: WebSocket | null;
   black: WebSocket | null;
+  ratings: { white: number | null; black: number | null };
   game: ChessGame;
   turnTimer: NodeJS.Timeout | null;
   turnStartedAt: number;
@@ -23,11 +28,7 @@ export class RoomManager {
     if (!this.waitingForMatch) { this.waitingForMatch = socket; return; }
     const opponent = this.waitingForMatch;
     this.waitingForMatch = null;
-    const room: GameRoom = {
-      id: randomUUID(), white: null, black: null,
-      game: new ChessGame(this.clockMs), turnTimer: null, turnStartedAt: 0,
-    };
-    this.rooms.set(room.id, room);
+    const room = this.openRoom("private");
     opponent.send(room.id);
     socket.send(room.id);
     opponent.close();
@@ -36,11 +37,26 @@ export class RoomManager {
 
   leaveMatchmaking(socket: WebSocket): void { if (this.waitingForMatch === socket) this.waitingForMatch = null; }
 
-  joinGame(gameId: string, socket: WebSocket): GameRoom | null {
+  createInvite(socket: WebSocket, visibility: RoomVisibility, rating: number = DEFAULT_RATING): string {
+    const room = this.openRoom(visibility);
+    room.white = socket;
+    room.ratings.white = rating;
+    socket.send(room.id);
+    return room.id;
+  }
+
+  listPublicRooms(): string[] {
+    return [...this.rooms.values()]
+      .filter(room => room.visibility === "public" && room.white && !room.black)
+      .map(room => room.id);
+  }
+
+  joinGame(gameId: string, socket: WebSocket, rating: number = DEFAULT_RATING): GameRoom | null {
     const room = this.rooms.get(gameId);
     if (!room || (room.white && room.black)) return null;
-    if (!room.white) { room.white = socket; return room; }
+    if (!room.white) { room.white = socket; room.ratings.white = rating; return room; }
     room.black = socket;
+    room.ratings.black = rating;
     room.white.send("white");
     room.black.send("black");
     this.scheduleFlag(room, "white");
@@ -90,6 +106,16 @@ export class RoomManager {
     }
 
     this.scheduleFlag(room, opposite(color));
+  }
+
+  private openRoom(visibility: RoomVisibility): GameRoom {
+    const room: GameRoom = {
+      id: randomUUID(), visibility, white: null, black: null,
+      ratings: { white: null, black: null },
+      game: new ChessGame(this.clockMs), turnTimer: null, turnStartedAt: 0,
+    };
+    this.rooms.set(room.id, room);
+    return room;
   }
 
   private scheduleFlag(room: GameRoom, color: Color): void {

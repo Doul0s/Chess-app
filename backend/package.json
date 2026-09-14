@@ -10,12 +10,14 @@
     "dev": "tsx src/server.ts"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "pg": "^8.12.0",
+    "ws": "^8.17.0"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@types/ws": "^8.18.1",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/ws": "^8.5.0",
     "tsx": "^4.23.13",
-    "typescript": "^5.9.3"
+    "typescript": "^5.5.0"
   }
 }
