@@ -1,11 +1,6 @@
-import type { Color, Piece, PieceType } from "./types.js";
+import type { Piece, PieceType } from "./types.js";
 
 export const FILES = "abcdefgh";
-export const RANKS = "12345678";
-
-export function isSquare(square: string): boolean {
-  return /^[a-h][1-8]$/.test(square);
-}
 
 export function fileOf(square: string): number { return FILES.indexOf(square[0]!); }
 export function rankOf(square: string): number { return Number(square[1]) - 1; }

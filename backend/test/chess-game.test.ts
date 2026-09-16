@@ -112,3 +112,151 @@ test("expireClock does not override an already-finished game", () => {
   game.expireClock("black");
   assert.equal(game.status, "checkmate");
 });
+
+test("captures en passant and removes the correct pawn", () => {
+  const game = new ChessGame();
+  play(game, "e2e4", "a7a6", "e4e5", "d7d5");
+  const result = game.makeMove("white", "e5d6");
+  assert.equal(result.ok, true);
+  assert.equal(game.board.get("d5"), undefined);
+  assert.deepEqual(game.board.get("d6"), { color: "white", type: "pawn" });
+});
+
+test("does not allow en passant once the window has passed", () => {
+  const game = new ChessGame();
+  play(game, "e2e4", "a7a6", "e4e5", "d7d5", "a2a3", "a6a5");
+  const result = game.makeMove("white", "e5d6");
+  assert.equal(result.ok, false);
+});
+
+test("a pinned piece cannot move off the pin line", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("e1", { color: "white", type: "king" });
+  state.board.set("e4", { color: "white", type: "bishop" });
+  state.board.set("e8", { color: "black", type: "rook" });
+  state.turn = "white";
+  const result = game.makeMove("white", "e4d5");
+  assert.equal(result.ok, false);
+  assert.equal(!result.ok && result.reason, "illegal_move");
+});
+
+test("the king cannot move into an attacked square", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("e1", { color: "white", type: "king" });
+  state.board.set("d8", { color: "black", type: "rook" });
+  state.turn = "white";
+  const result = game.makeMove("white", "e1d1");
+  assert.equal(result.ok, false);
+});
+
+test("detects threefold repetition as a draw", () => {
+  const game = new ChessGame();
+  play(game, "g1f3", "g8f6", "f3g1", "f6g8", "g1f3", "g8f6", "f3g1", "f6g8");
+  assert.equal(game.status, "draw");
+});
+
+test("supports queenside castling when legal", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("e1", { color: "white", type: "king" });
+  state.board.set("a1", { color: "white", type: "rook" });
+  state.turn = "white";
+  const result = game.makeMove("white", "e1c1");
+  assert.equal(result.ok, true);
+  assert.deepEqual(game.board.get("c1"), { color: "white", type: "king" });
+  assert.deepEqual(game.board.get("d1"), { color: "white", type: "rook" });
+});
+
+test("losing a rook to capture (not movement) still revokes that side's castling right", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("e1", { color: "white", type: "king" });
+  state.board.set("h1", { color: "white", type: "rook" });
+  state.board.set("h8", { color: "black", type: "rook" });
+  state.board.set("a8", { color: "black", type: "king" });
+  state.turn = "black";
+  const capture = game.makeMove("black", "h8h1");
+  assert.equal(capture.ok, true);
+  state.board.set("e8", { color: "black", type: "king" });
+  state.board.delete("a8");
+  state.board.delete("h1");
+  state.board.set("h1", { color: "white", type: "rook" });
+  state.turn = "white";
+  const castle = game.makeMove("white", "e1g1");
+  assert.equal(castle.ok, false);
+});
+
+test("detects insufficient material (king and bishop vs lone king) as a draw", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("a1", { color: "white", type: "king" });
+  state.board.set("b1", { color: "white", type: "bishop" });
+  state.board.set("a8", { color: "black", type: "king" });
+  state.turn = "black";
+  (game as any).updateStatus();
+  assert.equal(game.status, "draw");
+});
+
+test("does not call king and two bishops vs lone king a draw", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("a1", { color: "white", type: "king" });
+  state.board.set("b1", { color: "white", type: "bishop" });
+  state.board.set("c1", { color: "white", type: "bishop" });
+  state.board.set("a8", { color: "black", type: "king" });
+  state.turn = "black";
+  (game as any).updateStatus();
+  assert.equal(game.status, "active");
+});
+
+test("the fifty-move rule ends the game as a draw with no captures or pawn moves", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("a1", { color: "white", type: "king" });
+  state.board.set("h8", { color: "black", type: "king" });
+  state.board.set("a2", { color: "white", type: "rook" });
+  state.turn = "white";
+  const shuffle = ["a1b1", "h8h7", "b1a1", "h7h8"];
+  for (let i = 0; i < 24; i++) {
+    const color = i % 2 === 0 ? "white" : "black";
+    const result = game.makeMove(color, shuffle[i % 4]!);
+    assert.equal(result.ok, true, `move ${i} failed`);
+    if (game.status !== "active") break;
+  }
+  assert.equal(game.status, "draw");
+});
+
+test("supports underpromotion to a knight", () => {
+  const game = new ChessGame();
+  const state = (game as any).state;
+  state.board.clear();
+  state.board.set("e1", { color: "white", type: "king" });
+  state.board.set("e8", { color: "black", type: "king" });
+  state.board.set("a7", { color: "white", type: "pawn" });
+  state.turn = "white";
+  const result = game.makeMove("white", "a7a8n");
+  assert.equal(result.ok, true);
+  assert.deepEqual(game.board.get("a8"), { color: "white", type: "knight" });
+});
+
+test("rejects a move with an invalid input format", () => {
+  const game = new ChessGame();
+  const result = game.makeMove("white", "not a move");
+  assert.equal(result.ok, false);
+  assert.equal(!result.ok && result.reason, "invalid_move_format");
+});
+
+test("rejects capturing your own piece", () => {
+  const game = new ChessGame();
+  const result = game.makeMove("white", "d1e2");
+  assert.equal(result.ok, false);
+});

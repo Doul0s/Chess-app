@@ -1,5 +1,6 @@
 export type GameScore = 1 | 0.5 | 0;
 
+export const DEFAULT_RATING = 1200;
 const K_FACTOR = 32;
 
 export function expectedScore(rating: number, opponentRating: number): number {

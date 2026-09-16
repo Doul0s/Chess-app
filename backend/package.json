@@ -1,23 +1,12 @@
 {
   "name": "chess-server",
-  "version": "1.0.0",
-  "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test dist/test/*.test.js",
     "start": "node dist/src/server.js",
-    "dev": "tsx src/server.ts"
+    "migrate": "node dist/src/db/migrate.js",
+    "test": "node --test dist/test/*.test.js"
   },
-  "dependencies": {
-    "pg": "^8.12.0",
-    "ws": "^8.17.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/pg": "^8.11.0",
-    "@types/ws": "^8.5.0",
-    "tsx": "^4.23.13",
-    "typescript": "^5.5.0"
-  }
+  "devDependencies": { "typescript": "^5.5.0", "@types/ws": "^8.5.0", "@types/node": "^20.0.0", "@types/pg": "^8.11.0" },
+  "dependencies": { "ws": "^8.17.0", "pg": "^8.12.0" }
 }

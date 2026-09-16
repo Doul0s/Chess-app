@@ -85,6 +85,7 @@ export function applyMove(state: PositionState, move: Move): PositionState {
   next.board.delete(move.from);
 
   if (move.isEnPassant) {
+    // The captured pawn sits on the landing file, one rank behind the target.
     const captureRank = rankOf(move.to) + (piece.color === "white" ? -1 : 1);
     next.board.delete(squareOf(fileOf(move.to), captureRank));
   }
@@ -101,6 +102,8 @@ export function applyMove(state: PositionState, move: Move): PositionState {
   next.board.delete(move.to);
   next.board.set(move.to, { ...piece, ...(move.promotion ? { type: move.promotion } : {}) });
 
+// Moving a king or moving/capturing a rook off its corner revokes that
+  // side's castling right permanently.
   if (piece.type === "king") {
     const [kingRight, queenRight] = piece.color === "white" ? ["whiteKing", "whiteQueen"] as const : ["blackKing", "blackQueen"] as const;
     next.castling[kingRight] = false;
@@ -193,6 +196,14 @@ export function generateLegalMoves(state: PositionState, fromFilter?: string): M
     const next = applyMove(state, move);
     return !isInCheck(next, state.turn);
   });
+}
+
+const PROMOTION_LETTERS: Record<Exclude<PieceType, "king" | "pawn">, string> = {
+  queen: "q", rook: "r", bishop: "b", knight: "n",
+};
+
+export function moveToLan(move: Move): string {
+  return `${move.from}${move.to}${move.promotion ? PROMOTION_LETTERS[move.promotion] : ""}`;
 }
 
 export function parseMove(input: string): { from: string; to: string; promotion?: Move["promotion"] } | null {

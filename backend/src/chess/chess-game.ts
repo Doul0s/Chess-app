@@ -76,6 +76,7 @@ export class ChessGame {
         : "stalemate";
       return;
     }
+    // 50-move rule, threefold repetition, or insufficient material ends it as a draw.
     if (this.halfmoveClock >= 100 || this.positions.get(this.positionKey())! >= 3 || this.isInsufficientMaterial()) {
       this.status = "draw";
       return;
@@ -83,6 +84,8 @@ export class ChessGame {
     this.status = "active";
   }
 
+  // FEN-style key (placement, side to move, castling rights, en passant) so
+  // identical positions always yield the same key for repetition detection.
   private positionKey(): string {
     const rights: [boolean, string][] = [
       [this.state.castling.whiteKing, "K"], [this.state.castling.whiteQueen, "Q"],
@@ -99,6 +102,7 @@ export class ChessGame {
     if (nonKings.some(piece => piece.type === "pawn" || piece.type === "rook" || piece.type === "queen")) return false;
     if (nonKings.length === 1 && (nonKings[0]!.type === "bishop" || nonKings[0]!.type === "knight")) return true;
     if (nonKings.every(piece => piece.type === "bishop")) {
+      // Bishops on the same square color everywhere are a draw (can't mate).
       const bishops = [...this.state.board.entries()].filter(([,p]) => p.type === "bishop");
       const colors = bishops.map(([square]) => (Number(square[1]) + "abcdefgh".indexOf(square[0]!)) % 2);
       return colors.every(c => c === colors[0]);
