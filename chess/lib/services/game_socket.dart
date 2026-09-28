@@ -42,13 +42,10 @@ class GameSocket {
   Stream<ServerEvent> connect(String path, {Map<String, String>? params}) {
     final uri = Uri.parse("$wsBase$path").replace(queryParameters: params);
     _channel = WebSocketChannel.connect(uri);
-    return _channel!.stream.map((raw) => ServerEvent.parse(raw is String ? raw : utf8.decode(raw as List<int>)));
+    return _channel!.stream.map((raw) => ServerEvent.parse(raw as String));
   }
 
   void sendMove(String move) => _channel?.sink.add(move);
 
-  void close() {
-    _channel?.sink.close();
-    _channel = null;
-  }
+  void close() => _channel?.sink.close();
 }

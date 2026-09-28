@@ -5,6 +5,7 @@ import "screens/main_menu_screen.dart";
 import "screens/waiting_room_screen.dart";
 import "state/game_state.dart";
 import "state/session.dart";
+import "theme.dart";
 
 void main() => runApp(const ChessApp());
 
@@ -24,10 +25,7 @@ class ChessApp extends StatelessWidget {
       child: MaterialApp(
         title: "Chess",
         debugShowCheckedModeBanner: false,
-        theme: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: Colors.black,
-          colorScheme: const ColorScheme.dark(primary: Colors.white),
-        ),
+        theme: appTheme,
         home: const _Root(),
       ),
     );

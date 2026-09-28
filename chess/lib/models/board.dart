@@ -12,8 +12,8 @@ class Board {
     final squares = <String, Piece>{};
     for (var i = 0; i < 8; i++) {
       squares["${files[i]}1"] = Piece("white", back[i]);
-      squares["${files[i]}2"] = const Piece("white", "pawn");
-      squares["${files[i]}7"] = const Piece("black", "pawn");
+      squares["${files[i]}2"] = Piece("white", "pawn");
+      squares["${files[i]}7"] = Piece("black", "pawn");
       squares["${files[i]}8"] = Piece("black", back[i]);
     }
     return Board(squares, "white");
@@ -25,7 +25,6 @@ class Board {
   /// Infers castling (king moves 2 files) and en passant (pawn moves
   /// diagonally into an empty square) the same way the server does.
   Board applyMove(String move) {
-    if (move.length < 4) return this;
     final from = move.substring(0, 2);
     final to = move.substring(2, 4);
     final promotion = move.length > 4 ? move[4] : null;
@@ -40,16 +39,15 @@ class Board {
 
     if (piece.type == "king" && (to.codeUnitAt(0) - from.codeUnitAt(0)).abs() == 2) {
       final rank = from[1];
-      final rookFrom = to.codeUnitAt(0) > from.codeUnitAt(0) ? "h$rank" : "a$rank";
-      final rook = next.remove(rookFrom);
-      if (rook != null) {
-        next[rookFrom == "h$rank" ? "f$rank" : "d$rank"] = rook;
+      if (to.codeUnitAt(0) > from.codeUnitAt(0)) {
+        next["f$rank"] = next.remove("h$rank")!; // kingside
+      } else {
+        next["d$rank"] = next.remove("a$rank")!; // queenside
       }
     }
 
     const promoted = {"q": "queen", "r": "rook", "b": "bishop", "n": "knight"};
-    final promotionType = promotion == null ? null : promoted[promotion];
-    next[to] = promotionType == null ? piece : Piece(piece.color, promotionType);
+    next[to] = promotion != null ? Piece(piece.color, promoted[promotion]!) : piece;
 
     return Board(next, turn == "white" ? "black" : "white");
   }
